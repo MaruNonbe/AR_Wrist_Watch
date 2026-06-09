@@ -164,9 +164,20 @@
       line-height: 1;
     }
 
-    input[type="range"] {
+    input[type="range"],
+    select {
       width: 100%;
       accent-color: var(--accent);
+    }
+
+    select {
+      height: 28px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: rgba(5, 6, 7, 0.64);
+      color: var(--text);
+      font: inherit;
+      font-size: 12px;
     }
 
     .ar-button {
@@ -237,7 +248,7 @@
       min-camera-orbit="auto auto 0.08m"
       max-camera-orbit="auto auto 0.34m"
       scale="1 1 1">
-      <button class="ar-button" slot="ar-button">AR陦ｨ遉ｺ</button>
+      <button class="ar-button" slot="ar-button">AR表示</button>
     </model-viewer>
 
     <div class="topbar">
@@ -254,6 +265,13 @@
     </div>
 
     <section class="controls" aria-label="Preview controls">
+      <div class="control">
+        <label for="watchSelect">Watch Type</label>
+        <select id="watchSelect">
+          <option value="diver">Diver Black</option>
+          <option value="classic">Classic Blue</option>
+        </select>
+      </div>
       <div class="control">
         <label for="scaleControl">Scale</label>
         <input id="scaleControl" type="range" min="0.5" max="2" step="0.01" value="1">
@@ -272,9 +290,24 @@
   <script>
     const viewer = document.getElementById("watchViewer");
     const arStatus = document.getElementById("arStatus");
+    const watchSelect = document.getElementById("watchSelect");
     const scaleControl = document.getElementById("scaleControl");
     const exposureControl = document.getElementById("exposureControl");
     const rotationControl = document.getElementById("rotationControl");
+
+    const WATCH_MODELS = {
+      diver: "exports/wristwatch_ar_wrap_animation.glb",
+      classic: "exports/wristwatch_ar_classic_blue.glb",
+    };
+
+    function switchWatchModel() {
+      const selected = watchSelect.value;
+      const nextSrc = WATCH_MODELS[selected] || WATCH_MODELS.diver;
+      if (!viewer.src.endsWith(nextSrc)) {
+        viewer.src = nextSrc;
+        viewer.iosSrc = nextSrc;
+      }
+    }
 
     function updateScale() {
       const value = Number(scaleControl.value);
@@ -289,6 +322,9 @@
       const degrees = Number(rotationControl.value);
       viewer.orientation = `${degrees}deg 0deg 0deg`;
     }
+
+    watchSelect.addEventListener("change", switchWatchModel);
+    switchWatchModel();
 
     scaleControl.addEventListener("input", updateScale);
     exposureControl.addEventListener("input", updateExposure);
@@ -305,7 +341,7 @@
 
       if (canActivate) {
         setStatus([
-          "AR is available on this device. Tap AR陦ｨ遉ｺ.",
+          "AR is available on this device. Tap AR表示.",
           "This preview opens native AR; the camera view may appear in a separate AR viewer.",
         ]);
         return;
@@ -339,6 +375,7 @@
   </script>
 </body>
 </html>
+
 
 
 

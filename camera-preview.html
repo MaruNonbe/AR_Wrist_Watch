@@ -203,6 +203,13 @@
 
   <section class="controls" aria-label="Tracking controls">
     <div class="control">
+      <label for="watchSelect">Watch Type</label>
+      <select id="watchSelect">
+        <option value="diver">Diver Black</option>
+        <option value="classic">Classic Blue</option>
+      </select>
+    </div>
+    <div class="control">
       <label for="scaleControl">Model Scale</label>
       <input id="scaleControl" type="range" min="0.45" max="2.2" step="0.01" value="1.05">
     </div>
@@ -227,10 +234,25 @@
     const watchLayer = document.getElementById("watchLayer");
     const watchViewer = document.getElementById("watchViewer");
     const message = document.getElementById("message");
+    const watchSelect = document.getElementById("watchSelect");
     const scaleControl = document.getElementById("scaleControl");
     const offsetControl = document.getElementById("offsetControl");
     const tiltControl = document.getElementById("tiltControl");
     const smoothControl = document.getElementById("smoothControl");
+
+
+    const WATCH_MODELS = {
+      diver: "exports/wristwatch_ar_wrap_animation.glb",
+      classic: "exports/wristwatch_ar_classic_blue.glb",
+    };
+
+    function switchWatchModel() {
+      const selected = watchSelect.value;
+      const nextSrc = WATCH_MODELS[selected] || WATCH_MODELS.diver;
+      if (!watchViewer.src.endsWith(nextSrc)) {
+        watchViewer.src = nextSrc;
+      }
+    }
 
     let hands;
     let streamReady = false;
@@ -468,12 +490,17 @@
       requestAnimationFrame(detectionLoop);
     }
 
+    watchSelect.addEventListener("change", switchWatchModel);
+    switchWatchModel();
+
     window.addEventListener("resize", resizeCanvas);
     resizeCanvas();
     startCamera().then(startHands).then(detectionLoop);
   </script>
 </body>
 </html>
+
+
 
 
 
