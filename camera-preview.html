@@ -3,8 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Wristwatch Camera Preview</title>
+  <title>Wristwatch Wrist Tracking Preview</title>
   <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
   <style>
     :root {
       color-scheme: dark;
@@ -13,11 +14,11 @@
       --text: #f4f6f8;
       --muted: #a7b0ba;
       --accent: #d4af37;
+      --ok: #69d391;
+      --warn: #f1c44e;
     }
 
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     html,
     body {
@@ -31,24 +32,44 @@
       letter-spacing: 0;
     }
 
-    video {
+    video,
+    canvas {
       position: fixed;
       inset: 0;
       width: 100%;
       height: 100%;
       object-fit: cover;
-      transform: scaleX(-1);
       background: #050607;
     }
 
-    model-viewer {
+    canvas {
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    #watchLayer {
       position: fixed;
-      inset: 0;
+      left: 50%;
+      top: 50%;
+      z-index: 2;
+      width: 250px;
+      height: 250px;
+      transform: translate(-50%, -50%) scale(1) rotate(0deg);
+      transform-origin: 50% 50%;
+      opacity: 0;
+      transition: opacity 160ms ease;
+      pointer-events: none;
+    }
+
+    #watchLayer.visible {
+      opacity: 1;
+    }
+
+    model-viewer {
       width: 100%;
       height: 100%;
       background: transparent;
       --poster-color: transparent;
-      pointer-events: auto;
     }
 
     .topbar,
@@ -95,7 +116,7 @@
 
     .message {
       top: calc(max(16px, env(safe-area-inset-top)) + 54px);
-      max-width: 620px;
+      max-width: 680px;
       padding: 10px 12px;
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -106,14 +127,14 @@
       backdrop-filter: blur(14px);
     }
 
-    .message strong {
-      color: var(--text);
-    }
+    .message strong { color: var(--text); }
+    .message .ok { color: var(--ok); }
+    .message .warn { color: var(--warn); }
 
     .controls {
       bottom: max(16px, env(safe-area-inset-bottom));
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 10px;
     }
 
@@ -139,79 +160,219 @@
       accent-color: var(--accent);
     }
 
-    @media (max-width: 640px) {
-      h1 {
-        font-size: 15px;
-      }
-
-      .controls {
-        grid-template-columns: 1fr;
-      }
-
-      .message {
-        font-size: 11px;
-      }
+    @media (max-width: 720px) {
+      h1 { font-size: 15px; }
+      .controls { grid-template-columns: 1fr 1fr; }
+      .message { font-size: 11px; }
+      #watchLayer { width: 220px; height: 220px; }
     }
   </style>
 </head>
 <body>
   <video id="camera" autoplay muted playsinline></video>
+  <canvas id="overlay"></canvas>
 
-  <model-viewer
-    id="watchViewer"
-    src="exports/wristwatch_ar.glb"
-    alt="Luxury wristwatch model over camera preview"
-    camera-controls
-    touch-action="pan-y"
-    auto-rotate
-    shadow-intensity="0.6"
-    exposure="1.1"
-    environment-image="neutral"
-    camera-orbit="0deg 48deg 0.19m"
-    field-of-view="28deg"
-    scale="1 1 1">
-  </model-viewer>
+  <div id="watchLayer">
+    <model-viewer
+      id="watchViewer"
+      src="exports/wristwatch_ar.glb"
+      alt="Luxury wristwatch model tracked to wrist"
+      interaction-prompt="none"
+      shadow-intensity="0.6"
+      exposure="1.1"
+      environment-image="neutral"
+      camera-orbit="0deg 48deg 0.19m"
+      field-of-view="28deg"
+      scale="1 1 1">
+    </model-viewer>
+  </div>
 
   <div class="topbar">
-    <h1>Camera Preview</h1>
+    <h1>Wrist Tracking Preview</h1>
     <a class="link" href="index.html">AR page</a>
   </div>
 
   <div class="message" id="message">
-    <strong>Camera status:</strong> Starting camera. If a permission dialog appears, allow camera access.
+    <strong>Status:</strong> Starting camera and hand tracking. Allow camera access if prompted.
   </div>
 
-  <section class="controls" aria-label="Preview controls">
+  <section class="controls" aria-label="Tracking controls">
     <div class="control">
-      <label for="scaleControl">Scale</label>
-      <input id="scaleControl" type="range" min="0.3" max="2.5" step="0.01" value="1">
+      <label for="scaleControl">Model Scale</label>
+      <input id="scaleControl" type="range" min="0.45" max="2.2" step="0.01" value="1.05">
     </div>
     <div class="control">
-      <label for="heightControl">Vertical</label>
-      <input id="heightControl" type="range" min="-35" max="35" step="1" value="0">
+      <label for="offsetControl">Wrist Offset</label>
+      <input id="offsetControl" type="range" min="-90" max="90" step="1" value="-26">
     </div>
     <div class="control">
-      <label for="tiltControl">Tilt</label>
-      <input id="tiltControl" type="range" min="-80" max="80" step="1" value="0">
+      <label for="tiltControl">Dial Tilt</label>
+      <input id="tiltControl" type="range" min="-80" max="80" step="1" value="12">
+    </div>
+    <div class="control">
+      <label for="smoothControl">Smoothing</label>
+      <input id="smoothControl" type="range" min="0.05" max="0.45" step="0.01" value="0.18">
     </div>
   </section>
 
   <script>
     const video = document.getElementById("camera");
-    const viewer = document.getElementById("watchViewer");
+    const canvas = document.getElementById("overlay");
+    const ctx = canvas.getContext("2d");
+    const watchLayer = document.getElementById("watchLayer");
+    const watchViewer = document.getElementById("watchViewer");
     const message = document.getElementById("message");
     const scaleControl = document.getElementById("scaleControl");
-    const heightControl = document.getElementById("heightControl");
+    const offsetControl = document.getElementById("offsetControl");
     const tiltControl = document.getElementById("tiltControl");
+    const smoothControl = document.getElementById("smoothControl");
 
-    function setMessage(text) {
-      message.innerHTML = `<strong>Camera status:</strong> ${text}`;
+    let hands;
+    let streamReady = false;
+    let detectorReady = false;
+    let isDetecting = false;
+    let lastSeen = 0;
+    let smoothed = null;
+
+    function setMessage(html) {
+      message.innerHTML = `<strong>Status:</strong> ${html}`;
+    }
+
+    function resizeCanvas() {
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(window.innerWidth * dpr);
+      canvas.height = Math.round(window.innerHeight * dpr);
+      canvas.style.width = `${window.innerWidth}px`;
+      canvas.style.height = `${window.innerHeight}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    function mapVideoPoint(point) {
+      const vw = video.videoWidth || 1280;
+      const vh = video.videoHeight || 720;
+      const sw = window.innerWidth;
+      const sh = window.innerHeight;
+      const coverScale = Math.max(sw / vw, sh / vh);
+      const drawnWidth = vw * coverScale;
+      const drawnHeight = vh * coverScale;
+      const offsetX = (sw - drawnWidth) / 2;
+      const offsetY = (sh - drawnHeight) / 2;
+
+      return {
+        x: offsetX + point.x * drawnWidth,
+        y: offsetY + point.y * drawnHeight,
+      };
+    }
+
+    function distance(a, b) {
+      return Math.hypot(a.x - b.x, a.y - b.y);
+    }
+
+    function lerp(a, b, t) {
+      return a + (b - a) * t;
+    }
+
+    function angleLerp(a, b, t) {
+      let diff = ((b - a + 540) % 360) - 180;
+      return a + diff * t;
+    }
+
+    function clearOverlay() {
+      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    }
+
+    function drawTracking(wrist, indexMcp, pinkyMcp, target) {
+      clearOverlay();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "rgba(212, 175, 55, 0.9)";
+      ctx.fillStyle = "rgba(105, 211, 145, 0.95)";
+      ctx.beginPath();
+      ctx.moveTo(indexMcp.x, indexMcp.y);
+      ctx.lineTo(wrist.x, wrist.y);
+      ctx.lineTo(pinkyMcp.x, pinkyMcp.y);
+      ctx.stroke();
+
+      for (const point of [wrist, indexMcp, pinkyMcp]) {
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
+      ctx.beginPath();
+      ctx.arc(target.x, target.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function applyWatchTransform(target) {
+      const smoothing = Number(smoothControl.value);
+      if (!smoothed) {
+        smoothed = { ...target };
+      } else {
+        smoothed.x = lerp(smoothed.x, target.x, smoothing);
+        smoothed.y = lerp(smoothed.y, target.y, smoothing);
+        smoothed.size = lerp(smoothed.size, target.size, smoothing);
+        smoothed.rotation = angleLerp(smoothed.rotation, target.rotation, smoothing);
+      }
+
+      const scale = Math.max(0.35, smoothed.size / 220) * Number(scaleControl.value);
+      const tilt = Number(tiltControl.value);
+      watchLayer.classList.add("visible");
+      watchLayer.style.transform = `translate(${smoothed.x - window.innerWidth / 2}px, ${smoothed.y - window.innerHeight / 2}px) translate(-50%, -50%) scale(${scale}) rotate(${smoothed.rotation}deg)`;
+      watchViewer.orientation = `${tilt}deg 0deg 0deg`;
+    }
+
+    function onHandsResults(results) {
+      clearOverlay();
+      const landmarks = results.multiHandLandmarks && results.multiHandLandmarks[0];
+
+      if (!landmarks) {
+        if (performance.now() - lastSeen > 450) {
+          watchLayer.classList.remove("visible");
+          setMessage(`<span class="warn">No hand detected.</span> Show your wrist and palm to the camera.`);
+        }
+        return;
+      }
+
+      const wrist = mapVideoPoint(landmarks[0]);
+      const indexMcp = mapVideoPoint(landmarks[5]);
+      const pinkyMcp = mapVideoPoint(landmarks[17]);
+      const palmCenter = {
+        x: (indexMcp.x + pinkyMcp.x) / 2,
+        y: (indexMcp.y + pinkyMcp.y) / 2,
+      };
+
+      const armVector = {
+        x: wrist.x - palmCenter.x,
+        y: wrist.y - palmCenter.y,
+      };
+      const armLength = Math.max(1, Math.hypot(armVector.x, armVector.y));
+      const normal = {
+        x: armVector.x / armLength,
+        y: armVector.y / armLength,
+      };
+      const offset = Number(offsetControl.value);
+      const target = {
+        x: wrist.x + normal.x * offset,
+        y: wrist.y + normal.y * offset,
+        size: distance(indexMcp, pinkyMcp) * 1.55,
+        rotation: Math.atan2(indexMcp.y - pinkyMcp.y, indexMcp.x - pinkyMcp.x) * 180 / Math.PI,
+      };
+
+      lastSeen = performance.now();
+      drawTracking(wrist, indexMcp, pinkyMcp, target);
+      applyWatchTransform(target);
+      setMessage(`<span class="ok">Hand detected.</span> Move your wrist slowly. Adjust scale and offset if the watch floats.`);
     }
 
     async function startCamera() {
+      if (!window.isSecureContext) {
+        setMessage(`<span class="warn">HTTPS is required.</span> Open this page from GitHub Pages, not a local HTTP address.`);
+        return;
+      }
+
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        const secureState = window.isSecureContext ? "secure" : "not secure";
-        setMessage(`Camera API is unavailable because this page is ${secureState}. Open it with HTTPS, or use localhost on the same device.`);
+        setMessage(`<span class="warn">Camera API is unavailable.</span> Use current Safari or Chrome on a camera-capable phone.`);
         return;
       }
 
@@ -225,29 +386,51 @@
           audio: false,
         });
         video.srcObject = stream;
-        setMessage("Camera is active. This is a visual preview before wrist tracking is added.");
+        await video.play();
+        streamReady = true;
+        setMessage("Camera is active. Loading hand tracking...");
       } catch (error) {
-        setMessage(`Camera could not start. HTTPS or localhost is required. Detail: ${error.name}`);
+        setMessage(`<span class="warn">Camera could not start.</span> Detail: ${error.name}`);
       }
     }
 
-    function updateModel() {
-      const scale = Number(scaleControl.value);
-      const vertical = Number(heightControl.value);
-      const tilt = Number(tiltControl.value);
+    async function startHands() {
+      if (!window.Hands) {
+        setMessage(`<span class="warn">Hand tracking library did not load.</span> Check network access and reload.`);
+        return;
+      }
 
-      viewer.scale = `${scale} ${scale} ${scale}`;
-      viewer.style.transform = `translateY(${vertical}px)`;
-      viewer.orientation = `${tilt}deg 0deg 0deg`;
+      hands = new Hands({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+      });
+      hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 0,
+        minDetectionConfidence: 0.65,
+        minTrackingConfidence: 0.55,
+      });
+      hands.onResults(onHandsResults);
+      detectorReady = true;
+      setMessage("Camera and hand tracking are ready. Show your wrist and palm to the camera.");
     }
 
-    scaleControl.addEventListener("input", updateModel);
-    heightControl.addEventListener("input", updateModel);
-    tiltControl.addEventListener("input", updateModel);
+    async function detectionLoop() {
+      if (streamReady && detectorReady && !isDetecting && video.readyState >= 2) {
+        isDetecting = true;
+        try {
+          await hands.send({ image: video });
+        } catch (error) {
+          setMessage(`<span class="warn">Tracking error.</span> ${error.name || error.message}`);
+        } finally {
+          isDetecting = false;
+        }
+      }
+      requestAnimationFrame(detectionLoop);
+    }
 
-    updateModel();
-    startCamera();
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+    startCamera().then(startHands).then(detectionLoop);
   </script>
 </body>
 </html>
-
