@@ -1,0 +1,253 @@
+﻿<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Wristwatch Camera Preview</title>
+  <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --panel: rgba(12, 14, 18, 0.72);
+      --line: rgba(255, 255, 255, 0.14);
+      --text: #f4f6f8;
+      --muted: #a7b0ba;
+      --accent: #d4af37;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #050607;
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+
+    video {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+      background: #050607;
+    }
+
+    model-viewer {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      --poster-color: transparent;
+      pointer-events: auto;
+    }
+
+    .topbar,
+    .controls,
+    .message {
+      position: fixed;
+      left: max(16px, env(safe-area-inset-left));
+      right: max(16px, env(safe-area-inset-right));
+      z-index: 3;
+    }
+
+    .topbar {
+      top: max(16px, env(safe-area-inset-top));
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      pointer-events: none;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 17px;
+      line-height: 1.1;
+      font-weight: 650;
+      text-shadow: 0 1px 10px rgba(0, 0, 0, 0.5);
+    }
+
+    .link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 40px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--text);
+      text-decoration: none;
+      font-size: 13px;
+      backdrop-filter: blur(14px);
+      pointer-events: auto;
+    }
+
+    .message {
+      top: calc(max(16px, env(safe-area-inset-top)) + 54px);
+      max-width: 620px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      backdrop-filter: blur(14px);
+    }
+
+    .message strong {
+      color: var(--text);
+    }
+
+    .controls {
+      bottom: max(16px, env(safe-area-inset-bottom));
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .control {
+      min-height: 56px;
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      backdrop-filter: blur(14px);
+    }
+
+    .control label {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    @media (max-width: 640px) {
+      h1 {
+        font-size: 15px;
+      }
+
+      .controls {
+        grid-template-columns: 1fr;
+      }
+
+      .message {
+        font-size: 11px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <video id="camera" autoplay muted playsinline></video>
+
+  <model-viewer
+    id="watchViewer"
+    src="exports/wristwatch_ar.glb"
+    alt="Luxury wristwatch model over camera preview"
+    camera-controls
+    touch-action="pan-y"
+    auto-rotate
+    shadow-intensity="0.6"
+    exposure="1.1"
+    environment-image="neutral"
+    camera-orbit="0deg 48deg 0.19m"
+    field-of-view="28deg"
+    scale="1 1 1">
+  </model-viewer>
+
+  <div class="topbar">
+    <h1>Camera Preview</h1>
+    <a class="link" href="index.html">AR page</a>
+  </div>
+
+  <div class="message" id="message">
+    <strong>Camera status:</strong> Starting camera. If a permission dialog appears, allow camera access.
+  </div>
+
+  <section class="controls" aria-label="Preview controls">
+    <div class="control">
+      <label for="scaleControl">Scale</label>
+      <input id="scaleControl" type="range" min="0.3" max="2.5" step="0.01" value="1">
+    </div>
+    <div class="control">
+      <label for="heightControl">Vertical</label>
+      <input id="heightControl" type="range" min="-35" max="35" step="1" value="0">
+    </div>
+    <div class="control">
+      <label for="tiltControl">Tilt</label>
+      <input id="tiltControl" type="range" min="-80" max="80" step="1" value="0">
+    </div>
+  </section>
+
+  <script>
+    const video = document.getElementById("camera");
+    const viewer = document.getElementById("watchViewer");
+    const message = document.getElementById("message");
+    const scaleControl = document.getElementById("scaleControl");
+    const heightControl = document.getElementById("heightControl");
+    const tiltControl = document.getElementById("tiltControl");
+
+    function setMessage(text) {
+      message.innerHTML = `<strong>Camera status:</strong> ${text}`;
+    }
+
+    async function startCamera() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        const secureState = window.isSecureContext ? "secure" : "not secure";
+        setMessage(`Camera API is unavailable because this page is ${secureState}. Open it with HTTPS, or use localhost on the same device.`);
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "environment",
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+        video.srcObject = stream;
+        setMessage("Camera is active. This is a visual preview before wrist tracking is added.");
+      } catch (error) {
+        setMessage(`Camera could not start. HTTPS or localhost is required. Detail: ${error.name}`);
+      }
+    }
+
+    function updateModel() {
+      const scale = Number(scaleControl.value);
+      const vertical = Number(heightControl.value);
+      const tilt = Number(tiltControl.value);
+
+      viewer.scale = `${scale} ${scale} ${scale}`;
+      viewer.style.transform = `translateY(${vertical}px)`;
+      viewer.orientation = `${tilt}deg 0deg 0deg`;
+    }
+
+    scaleControl.addEventListener("input", updateModel);
+    heightControl.addEventListener("input", updateModel);
+    tiltControl.addEventListener("input", updateModel);
+
+    updateModel();
+    startCamera();
+  </script>
+</body>
+</html>
+
