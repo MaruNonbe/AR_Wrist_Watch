@@ -136,6 +136,26 @@
     .message strong { color: var(--text); }
     .message .ok { color: var(--ok); }
     .message .warn { color: var(--warn); }
+    .start-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 38px;
+      margin-top: 8px;
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--accent);
+      color: #111;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .start-button:disabled {
+      opacity: 0.55;
+      cursor: default;
+    }
 
     .controls {
       bottom: max(16px, env(safe-area-inset-bottom));
@@ -199,7 +219,9 @@
   </div>
 
   <div class="message" id="message">
-    <strong>Status:</strong> Starting camera and hand tracking. Allow camera access if prompted.
+    <strong>Status:</strong> Tap Start Camera to allow camera access.
+    <br>
+    <button class="start-button" id="startCameraButton" type="button">Start Camera</button>
   </div>
 
   <section class="controls" aria-label="Tracking controls">
@@ -235,6 +257,7 @@
     const watchLayer = document.getElementById("watchLayer");
     const watchViewer = document.getElementById("watchViewer");
     const message = document.getElementById("message");
+    const startCameraButton = document.getElementById("startCameraButton");
     const watchSelect = document.getElementById("watchSelect");
     const scaleControl = document.getElementById("scaleControl");
     const offsetControl = document.getElementById("offsetControl");
@@ -261,6 +284,8 @@
     let isDetecting = false;
     let lastSeen = 0;
     let smoothed = null;
+    let experienceStarted = false;
+    let loopStarted = false;
 
     function setMessage(html) {
       message.innerHTML = `<strong>Status:</strong> ${html}`;
@@ -417,6 +442,14 @@
       setMessage(`<span class="ok">Hand detected.</span> Move your wrist slowly. Adjust scale and offset if the watch floats.`);
     }
 
+
+    function requestCameraStream(constraints) {
+      const request = navigator.mediaDevices.getUserMedia(constraints);
+      const timeout = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Camera permission timed out")), 15000);
+      });
+      return Promise.race([request, timeout]);
+    }
     async function startCamera() {
       if (!window.isSecureContext) {
         setMessage(`<span class="warn">HTTPS is required.</span> Open this page from GitHub Pages, not a local HTTP address.`);
@@ -429,7 +462,8 @@
       }
 
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
+        setMessage("Requesting camera permission. Please tap Allow if prompted.");
+        const stream = await requestCameraStream({
           video: {
             facingMode: "environment",
             width: { ideal: 1280 },
@@ -491,15 +525,40 @@
       requestAnimationFrame(detectionLoop);
     }
 
+
+    async function startExperience() {
+      if (experienceStarted) {
+        return;
+      }
+
+      experienceStarted = true;
+      startCameraButton.disabled = true;
+      startCameraButton.textContent = "Starting...";
+
+      await startCamera();
+      if (!streamReady) {
+        experienceStarted = false;
+        startCameraButton.disabled = false;
+        startCameraButton.textContent = "Start Camera";
+        return;
+      }
+
+      await startHands();
+      if (!loopStarted) {
+        loopStarted = true;
+        detectionLoop();
+      }
+    }
     watchSelect.addEventListener("change", switchWatchModel);
     switchWatchModel();
 
     window.addEventListener("resize", resizeCanvas);
     resizeCanvas();
-    startCamera().then(startHands).then(detectionLoop);
+    startCameraButton.addEventListener("click", startExperience);
   </script>
 </body>
 </html>
+
 
 
 
