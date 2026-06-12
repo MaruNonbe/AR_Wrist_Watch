@@ -131,6 +131,7 @@
       font-size: 12px;
       line-height: 1.45;
       backdrop-filter: blur(14px);
+      pointer-events: auto;
     }
 
     .message strong { color: var(--text); }
@@ -221,7 +222,7 @@
   <div class="message" id="message">
     <strong>Status:</strong> Tap Start Camera to allow camera access.
     <br>
-    <button class="start-button" id="startCameraButton" type="button">Start Camera</button>
+    <button class="start-button" id="startCameraButton" type="button" onclick="window.startExperience && window.startExperience(event)">Start Camera</button>
   </div>
 
   <section class="controls" aria-label="Tracking controls">
@@ -526,12 +527,18 @@
     }
 
 
-    async function startExperience() {
+    async function startExperience(event) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+
       if (experienceStarted) {
         return;
       }
 
       experienceStarted = true;
+      setMessage("Start button tapped. Requesting camera permission...");
       startCameraButton.disabled = true;
       startCameraButton.textContent = "Starting...";
 
@@ -554,10 +561,14 @@
 
     window.addEventListener("resize", resizeCanvas);
     resizeCanvas();
+    window.startExperience = startExperience;
     startCameraButton.addEventListener("click", startExperience);
+    startCameraButton.addEventListener("pointerup", startExperience);
+    startCameraButton.addEventListener("touchend", startExperience, { passive: false });
   </script>
 </body>
 </html>
+
 
 
 
