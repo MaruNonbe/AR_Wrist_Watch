@@ -380,9 +380,10 @@
 
       const scale = Math.max(0.35, smoothed.size / 220) * Number(scaleControl.value);
       const dialRotate = Number(tiltControl.value);
+      const totalRotation = smoothed.rotation + dialRotate;
       watchLayer.classList.add("visible");
-      watchLayer.style.transform = `translate(${smoothed.x - window.innerWidth / 2}px, ${smoothed.y - window.innerHeight / 2}px) translate(-50%, -50%) scale(${scale}) rotate(${smoothed.rotation}deg)`;
-      watchViewer.orientation = `0deg 0deg ${dialRotate}deg`;
+      watchLayer.style.transform = `translate(${smoothed.x - window.innerWidth / 2}px, ${smoothed.y - window.innerHeight / 2}px) translate(-50%, -50%) scale(${scale}) rotate(${totalRotation}deg)`;
+      watchViewer.orientation = "0deg 0deg 0deg";
 
     }
     function onHandsResults(results) {
