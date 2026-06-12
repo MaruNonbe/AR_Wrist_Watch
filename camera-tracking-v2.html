@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Wristwatch Wrist Tracking Preview v2</title>
+  <title>Wristwatch Wrist Tracking Preview v3</title>
   <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
   <style>
@@ -215,7 +215,7 @@
   </div>
 
   <div class="topbar">
-    <h1>Wrist Tracking Preview v2</h1>
+    <h1>Wrist Tracking Preview v3</h1>
     <a class="link" href="index.html">AR page</a>
   </div>
 
@@ -340,23 +340,8 @@
       return a + diff * t;
     }
 
-    function drawCameraFrame() {
-      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-
-      if (!streamReady || !video.videoWidth || !video.videoHeight) {
-        return;
-      }
-
-      const rect = getCoverRect();
-      try {
-        ctx.drawImage(video, rect.x, rect.y, rect.width, rect.height);
-      } catch (error) {
-        // Some browsers briefly reject drawImage while the stream is warming up.
-      }
-    }
-
     function clearOverlay() {
-      drawCameraFrame();
+      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
     }
 
     function drawTracking(wrist, indexMcp, pinkyMcp, target) {
@@ -481,7 +466,7 @@
           });
         }
         streamReady = true;
-        drawCameraFrame();
+        video.classList.add("camera-active");
         setMessage(`Camera is active (${video.videoWidth || "?"} x ${video.videoHeight || "?"}). Loading hand tracking...`);
       } catch (error) {
         setMessage(`<span class="warn">Camera could not start.</span> Detail: ${error.name}`);
@@ -509,10 +494,6 @@
     }
 
     async function detectionLoop() {
-      if (streamReady && !isDetecting) {
-        drawCameraFrame();
-      }
-
       if (streamReady && detectorReady && !isDetecting && video.readyState >= 2) {
         isDetecting = true;
         try {
@@ -565,9 +546,13 @@
     startCameraButton.addEventListener("click", startExperience);
     startCameraButton.addEventListener("pointerup", startExperience);
     startCameraButton.addEventListener("touchend", startExperience, { passive: false });
+    video.addEventListener("playing", () => video.classList.add("camera-active"));
+    video.addEventListener("pause", () => setMessage("Camera paused. Tap Start Camera again if the screen is black."));
+    video.addEventListener("ended", () => setMessage("Camera ended. Tap Start Camera again."));
   </script>
 </body>
 </html>
+
 
 
 
