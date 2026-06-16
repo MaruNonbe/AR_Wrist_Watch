@@ -319,7 +319,8 @@
     let isDetecting = false;
     let lastSeen = 0;
     let smoothed = null;
-    let lockedTransform = null;
+    let latestBaseTarget = null;
+    let lockedOffset = null;
     let isWatchLocked = false;
     let experienceStarted = false;
     let loopStarted = false;
@@ -404,12 +405,17 @@
     }
 
     function toggleWatchLock() {
-      if (!isWatchLocked && smoothed) {
-        lockedTransform = cloneTransform(smoothed);
+      if (!isWatchLocked && smoothed && latestBaseTarget) {
+        lockedOffset = {
+          x: smoothed.x - latestBaseTarget.x,
+          y: smoothed.y - latestBaseTarget.y,
+          size: smoothed.size / Math.max(1, latestBaseTarget.size),
+          rotation: smoothed.rotation - latestBaseTarget.rotation,
+        };
         isWatchLocked = true;
       } else {
         isWatchLocked = false;
-        lockedTransform = null;
+        lockedOffset = null;
       }
       lockWatchButton.classList.toggle("active", isWatchLocked);
       lockWatchButton.textContent = isWatchLocked ? "Unlock Watch" : "Lock Watch";
@@ -446,11 +452,19 @@
       const smoothing = Number(smoothControl.value);
       const deadZonePixels = Number(deadZoneControl.value);
       const deadZoneDegrees = Math.max(1, deadZonePixels * 0.55);
+
+      if (isWatchLocked && lockedOffset) {
+        target = {
+          x: target.x + lockedOffset.x,
+          y: target.y + lockedOffset.y,
+          size: target.size * lockedOffset.size,
+          rotation: target.rotation + lockedOffset.rotation,
+        };
+      }
+
       const stabilizedTarget = applyDeadZone(smoothed, target, deadZonePixels, deadZoneDegrees);
 
-      if (isWatchLocked && lockedTransform) {
-        smoothed = cloneTransform(lockedTransform);
-      } else if (!smoothed) {
+      if (!smoothed) {
         smoothed = { ...stabilizedTarget };
       } else {
         smoothed.x = lerp(smoothed.x, stabilizedTarget.x, smoothing);
@@ -500,17 +514,28 @@
         y: armVector.y / armLength,
       };
       const offset = Number(offsetControl.value);
-      const target = {
+      const baseTarget = {
         x: wrist.x + normal.x * offset,
         y: wrist.y + normal.y * offset,
         size: distance(indexMcp, pinkyMcp) * 1.55,
         rotation: Math.atan2(indexMcp.y - pinkyMcp.y, indexMcp.x - pinkyMcp.x) * 180 / Math.PI,
       };
 
+      latestBaseTarget = { ...baseTarget };
+      if (isWatchLocked && !lockedOffset && smoothed) {
+        lockedOffset = {
+          x: smoothed.x - baseTarget.x,
+          y: smoothed.y - baseTarget.y,
+          size: smoothed.size / Math.max(1, baseTarget.size),
+          rotation: smoothed.rotation - baseTarget.rotation,
+        };
+      }
+      const target = baseTarget;
+
       lastSeen = performance.now();
       drawTracking(wrist, indexMcp, pinkyMcp, target);
       applyWatchTransform(target);
-      const lockText = isWatchLocked ? " Watch is locked." : "";
+      const lockText = isWatchLocked ? " Watch position is locked to the wrist." : "";
       setMessage(`<span class="ok">Hand detected.</span>${lockText} Adjust scale, offset, and roll if needed.`);
     }
 
@@ -639,6 +664,8 @@
   </script>
 </body>
 </html>
+
+
 
 
 
