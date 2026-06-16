@@ -246,10 +246,14 @@
 
   <section class="controls" aria-label="Tracking controls">
     <div class="control">
-      <label for="watchSelect">Watch Type</label>
+      <label for="watchSelect">AR Item</label>
       <select id="watchSelect">
         <option value="diver">Diver Black</option>
         <option value="classic">Classic Blue</option>
+        <option value="bracelet">Metal Bracelet</option>
+        <option value="ring">Gold Ring</option>
+        <option value="nails">Rose Nails</option>
+        <option value="glove">Black Glove</option>
       </select>
     </div>
     <div class="control">
@@ -300,17 +304,67 @@
     const lockWatchButton = document.getElementById("lockWatchButton");
 
 
-    const WATCH_MODELS = {
-      diver: "exports/wristwatch_ar_wrap_animation.glb",
-      classic: "exports/wristwatch_ar_classic_blue.glb",
+    const ITEM_CONFIGS = {
+      diver: {
+        src: "exports/wristwatch_ar_wrap_animation.glb",
+        mode: "wrist",
+        sizeFactor: 1.55,
+        orbit: "0deg 48deg 0.19m",
+        orientation: [0, 0, 0],
+      },
+      classic: {
+        src: "exports/wristwatch_ar_classic_blue.glb",
+        mode: "wrist",
+        sizeFactor: 1.55,
+        orbit: "0deg 48deg 0.19m",
+        orientation: [0, 0, 0],
+      },
+      bracelet: {
+        src: "exports/ar_bracelet_metal.glb",
+        mode: "wrist",
+        sizeFactor: 1.45,
+        orbit: "0deg 52deg 0.13m",
+        orientation: [0, 0, 0],
+      },
+      ring: {
+        src: "exports/ar_ring_gold_gem.glb",
+        mode: "ring",
+        sizeFactor: 1.35,
+        orbit: "0deg 50deg 0.055m",
+        orientation: [0, 0, 0],
+      },
+      nails: {
+        src: "exports/ar_nails_rose.glb",
+        mode: "nails",
+        sizeFactor: 1.55,
+        orbit: "0deg 38deg 0.12m",
+        orientation: [0, 0, 0],
+      },
+      glove: {
+        src: "exports/ar_glove_black.glb",
+        mode: "glove",
+        sizeFactor: 1.55,
+        orbit: "0deg 42deg 0.17m",
+        orientation: [0, 0, 0],
+      },
     };
 
+    function getSelectedConfig() {
+      return ITEM_CONFIGS[watchSelect.value] || ITEM_CONFIGS.diver;
+    }
+
     function switchWatchModel() {
-      const selected = watchSelect.value;
-      const nextSrc = WATCH_MODELS[selected] || WATCH_MODELS.diver;
-      if (!watchViewer.src.endsWith(nextSrc)) {
-        watchViewer.src = nextSrc;
+      const config = getSelectedConfig();
+      if (!watchViewer.src.endsWith(config.src)) {
+        watchViewer.src = config.src;
       }
+      watchViewer.setAttribute("camera-orbit", config.orbit);
+      smoothed = null;
+      latestBaseTarget = null;
+      lockedOffset = null;
+      isWatchLocked = false;
+      lockWatchButton.classList.remove("active");
+      lockWatchButton.textContent = "Lock Watch";
     }
 
     let hands;
@@ -425,6 +479,69 @@
       ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
     }
 
+    function averagePoints(points) {
+      return points.reduce((sum, point) => ({
+        x: sum.x + point.x / points.length,
+        y: sum.y + point.y / points.length,
+      }), { x: 0, y: 0 });
+    }
+
+    function createTrackingTarget(points, config) {
+      const wrist = points.wrist;
+      const indexMcp = points.indexMcp;
+      const pinkyMcp = points.pinkyMcp;
+      const palmCenter = averagePoints([indexMcp, pinkyMcp, points.middleMcp]);
+      const palmRotation = Math.atan2(indexMcp.y - pinkyMcp.y, indexMcp.x - pinkyMcp.x) * 180 / Math.PI;
+      const offset = Number(offsetControl.value);
+
+      if (config.mode === "ring") {
+        const ringCenter = averagePoints([points.ringPip, points.ringDip]);
+        const fingerRotation = Math.atan2(points.ringTip.y - points.ringMcp.y, points.ringTip.x - points.ringMcp.x) * 180 / Math.PI + 90;
+        return {
+          x: ringCenter.x,
+          y: ringCenter.y,
+          size: distance(points.ringMcp, points.ringTip) * config.sizeFactor,
+          rotation: fingerRotation,
+        };
+      }
+
+      if (config.mode === "nails") {
+        const nailCenter = averagePoints([points.thumbTip, points.indexTip, points.middleTip, points.ringTip, points.pinkyTip]);
+        return {
+          x: nailCenter.x,
+          y: nailCenter.y,
+          size: distance(indexMcp, pinkyMcp) * config.sizeFactor,
+          rotation: palmRotation,
+        };
+      }
+
+      if (config.mode === "glove") {
+        const handCenter = averagePoints([wrist, points.indexTip, points.middleTip, points.ringTip, points.pinkyTip]);
+        return {
+          x: handCenter.x,
+          y: handCenter.y,
+          size: distance(wrist, points.middleTip) * config.sizeFactor,
+          rotation: Math.atan2(points.middleTip.y - wrist.y, points.middleTip.x - wrist.x) * 180 / Math.PI + 90,
+        };
+      }
+
+      const armVector = {
+        x: wrist.x - palmCenter.x,
+        y: wrist.y - palmCenter.y,
+      };
+      const armLength = Math.max(1, Math.hypot(armVector.x, armVector.y));
+      const normal = {
+        x: armVector.x / armLength,
+        y: armVector.y / armLength,
+      };
+      return {
+        x: wrist.x + normal.x * offset,
+        y: wrist.y + normal.y * offset,
+        size: distance(indexMcp, pinkyMcp) * config.sizeFactor,
+        rotation: palmRotation,
+      };
+    }
+
     function drawTracking(wrist, indexMcp, pinkyMcp, target) {
       clearOverlay();
       ctx.lineWidth = 3;
@@ -475,11 +592,12 @@
 
       const scale = Math.max(0.35, smoothed.size / 220) * Number(scaleControl.value);
       const dialRotate = Number(tiltControl.value);
-      const bandRoll = Number(bandRollControl.value);
+      const config = getSelectedConfig();
+      const bandRoll = Number(bandRollControl.value) + config.orientation[0];
       const totalRotation = smoothed.rotation + dialRotate;
       watchLayer.classList.add("visible");
       watchLayer.style.transform = `translate(${smoothed.x - window.innerWidth / 2}px, ${smoothed.y - window.innerHeight / 2}px) translate(-50%, -50%) scale(${scale}) rotate(${totalRotation}deg)`;
-      watchViewer.orientation = `${bandRoll}deg 0deg 0deg`;
+      watchViewer.orientation = `${bandRoll}deg ${config.orientation[1]}deg ${config.orientation[2]}deg`;
 
     }
     function onHandsResults(results) {
@@ -496,30 +614,22 @@
         return;
       }
 
-      const wrist = mapVideoPoint(landmarks[0]);
-      const indexMcp = mapVideoPoint(landmarks[5]);
-      const pinkyMcp = mapVideoPoint(landmarks[17]);
-      const palmCenter = {
-        x: (indexMcp.x + pinkyMcp.x) / 2,
-        y: (indexMcp.y + pinkyMcp.y) / 2,
+      const points = {
+        wrist: mapVideoPoint(landmarks[0]),
+        thumbTip: mapVideoPoint(landmarks[4]),
+        indexMcp: mapVideoPoint(landmarks[5]),
+        indexTip: mapVideoPoint(landmarks[8]),
+        middleMcp: mapVideoPoint(landmarks[9]),
+        middleTip: mapVideoPoint(landmarks[12]),
+        ringMcp: mapVideoPoint(landmarks[13]),
+        ringPip: mapVideoPoint(landmarks[14]),
+        ringDip: mapVideoPoint(landmarks[15]),
+        ringTip: mapVideoPoint(landmarks[16]),
+        pinkyMcp: mapVideoPoint(landmarks[17]),
+        pinkyTip: mapVideoPoint(landmarks[20]),
       };
-
-      const armVector = {
-        x: wrist.x - palmCenter.x,
-        y: wrist.y - palmCenter.y,
-      };
-      const armLength = Math.max(1, Math.hypot(armVector.x, armVector.y));
-      const normal = {
-        x: armVector.x / armLength,
-        y: armVector.y / armLength,
-      };
-      const offset = Number(offsetControl.value);
-      const baseTarget = {
-        x: wrist.x + normal.x * offset,
-        y: wrist.y + normal.y * offset,
-        size: distance(indexMcp, pinkyMcp) * 1.55,
-        rotation: Math.atan2(indexMcp.y - pinkyMcp.y, indexMcp.x - pinkyMcp.x) * 180 / Math.PI,
-      };
+      const config = getSelectedConfig();
+      const baseTarget = createTrackingTarget(points, config);
 
       latestBaseTarget = { ...baseTarget };
       if (isWatchLocked && !lockedOffset && smoothed) {
@@ -533,9 +643,9 @@
       const target = baseTarget;
 
       lastSeen = performance.now();
-      drawTracking(wrist, indexMcp, pinkyMcp, target);
+      drawTracking(points.wrist, points.indexMcp, points.pinkyMcp, target);
       applyWatchTransform(target);
-      const lockText = isWatchLocked ? " Watch position is locked to the wrist." : "";
+      const lockText = isWatchLocked ? " Item position is locked to the hand." : "";
       setMessage(`<span class="ok">Hand detected.</span>${lockText} Adjust scale, offset, and roll if needed.`);
     }
 
@@ -664,6 +774,7 @@
   </script>
 </body>
 </html>
+
 
 
 
