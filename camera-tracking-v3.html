@@ -157,6 +157,25 @@
       opacity: 0.55;
       cursor: default;
     }
+    .lock-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 28px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      font-weight: 700;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .lock-button.active {
+      background: var(--accent);
+      color: #111;
+    }
 
     .controls {
       bottom: max(16px, env(safe-area-inset-bottom));
@@ -246,8 +265,20 @@
       <input id="tiltControl" type="range" min="-180" max="180" step="1" value="0">
     </div>
     <div class="control">
+      <label for="bandRollControl">Band Axis Roll</label>
+      <input id="bandRollControl" type="range" min="-75" max="75" step="1" value="0">
+    </div>
+    <div class="control">
       <label for="smoothControl">Smoothing</label>
-      <input id="smoothControl" type="range" min="0.05" max="0.45" step="0.01" value="0.18">
+      <input id="smoothControl" type="range" min="0.03" max="0.35" step="0.01" value="0.10">
+    </div>
+    <div class="control">
+      <label for="deadZoneControl">Dead Zone</label>
+      <input id="deadZoneControl" type="range" min="0" max="18" step="1" value="6">
+    </div>
+    <div class="control">
+      <label for="lockWatchButton">Watch Lock</label>
+      <button class="lock-button" id="lockWatchButton" type="button">Lock Watch</button>
     </div>
   </section>
 
@@ -263,7 +294,10 @@
     const scaleControl = document.getElementById("scaleControl");
     const offsetControl = document.getElementById("offsetControl");
     const tiltControl = document.getElementById("tiltControl");
+    const bandRollControl = document.getElementById("bandRollControl");
     const smoothControl = document.getElementById("smoothControl");
+    const deadZoneControl = document.getElementById("deadZoneControl");
+    const lockWatchButton = document.getElementById("lockWatchButton");
 
 
     const WATCH_MODELS = {
@@ -285,6 +319,8 @@
     let isDetecting = false;
     let lastSeen = 0;
     let smoothed = null;
+    let lockedTransform = null;
+    let isWatchLocked = false;
     let experienceStarted = false;
     let loopStarted = false;
 
@@ -340,6 +376,45 @@
       return a + diff * t;
     }
 
+    function getAngleDelta(a, b) {
+      return Math.abs(((b - a + 540) % 360) - 180);
+    }
+
+    function cloneTransform(transform) {
+      return transform ? { ...transform } : null;
+    }
+
+    function applyDeadZone(previous, target, pixels, degrees) {
+      if (!previous) {
+        return { ...target };
+      }
+
+      const next = { ...target };
+      if (distance(previous, target) < pixels) {
+        next.x = previous.x;
+        next.y = previous.y;
+      }
+      if (Math.abs(previous.size - target.size) < pixels * 0.75) {
+        next.size = previous.size;
+      }
+      if (getAngleDelta(previous.rotation, target.rotation) < degrees) {
+        next.rotation = previous.rotation;
+      }
+      return next;
+    }
+
+    function toggleWatchLock() {
+      if (!isWatchLocked && smoothed) {
+        lockedTransform = cloneTransform(smoothed);
+        isWatchLocked = true;
+      } else {
+        isWatchLocked = false;
+        lockedTransform = null;
+      }
+      lockWatchButton.classList.toggle("active", isWatchLocked);
+      lockWatchButton.textContent = isWatchLocked ? "Unlock Watch" : "Lock Watch";
+    }
+
     function clearOverlay() {
       ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
     }
@@ -369,21 +444,28 @@
 
     function applyWatchTransform(target) {
       const smoothing = Number(smoothControl.value);
-      if (!smoothed) {
-        smoothed = { ...target };
+      const deadZonePixels = Number(deadZoneControl.value);
+      const deadZoneDegrees = Math.max(1, deadZonePixels * 0.55);
+      const stabilizedTarget = applyDeadZone(smoothed, target, deadZonePixels, deadZoneDegrees);
+
+      if (isWatchLocked && lockedTransform) {
+        smoothed = cloneTransform(lockedTransform);
+      } else if (!smoothed) {
+        smoothed = { ...stabilizedTarget };
       } else {
-        smoothed.x = lerp(smoothed.x, target.x, smoothing);
-        smoothed.y = lerp(smoothed.y, target.y, smoothing);
-        smoothed.size = lerp(smoothed.size, target.size, smoothing);
-        smoothed.rotation = angleLerp(smoothed.rotation, target.rotation, smoothing);
+        smoothed.x = lerp(smoothed.x, stabilizedTarget.x, smoothing);
+        smoothed.y = lerp(smoothed.y, stabilizedTarget.y, smoothing);
+        smoothed.size = lerp(smoothed.size, stabilizedTarget.size, smoothing);
+        smoothed.rotation = angleLerp(smoothed.rotation, stabilizedTarget.rotation, smoothing);
       }
 
       const scale = Math.max(0.35, smoothed.size / 220) * Number(scaleControl.value);
       const dialRotate = Number(tiltControl.value);
+      const bandRoll = Number(bandRollControl.value);
       const totalRotation = smoothed.rotation + dialRotate;
       watchLayer.classList.add("visible");
       watchLayer.style.transform = `translate(${smoothed.x - window.innerWidth / 2}px, ${smoothed.y - window.innerHeight / 2}px) translate(-50%, -50%) scale(${scale}) rotate(${totalRotation}deg)`;
-      watchViewer.orientation = "0deg 0deg 0deg";
+      watchViewer.orientation = `${bandRoll}deg 0deg 0deg`;
 
     }
     function onHandsResults(results) {
@@ -392,7 +474,9 @@
 
       if (!landmarks) {
         if (performance.now() - lastSeen > 450) {
-          watchLayer.classList.remove("visible");
+          if (!isWatchLocked) {
+            watchLayer.classList.remove("visible");
+          }
           setMessage(`<span class="warn">No hand detected.</span> Show your wrist and palm to the camera.`);
         }
         return;
@@ -426,7 +510,8 @@
       lastSeen = performance.now();
       drawTracking(wrist, indexMcp, pinkyMcp, target);
       applyWatchTransform(target);
-      setMessage(`<span class="ok">Hand detected.</span> Move your wrist slowly. Adjust scale and offset if the watch floats.`);
+      const lockText = isWatchLocked ? " Watch is locked." : "";
+      setMessage(`<span class="ok">Hand detected.</span>${lockText} Adjust scale, offset, and roll if needed.`);
     }
 
 
@@ -539,6 +624,7 @@
       }
     }
     watchSelect.addEventListener("change", switchWatchModel);
+    lockWatchButton.addEventListener("click", toggleWatchLock);
     switchWatchModel();
 
     window.addEventListener("resize", resizeCanvas);
@@ -553,6 +639,9 @@
   </script>
 </body>
 </html>
+
+
+
 
 
 
