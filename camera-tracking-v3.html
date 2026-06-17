@@ -306,14 +306,14 @@
 
     const ITEM_CONFIGS = {
       diver: {
-        src: "exports/wristwatch_ar_wrap_animation.glb",
+        src: "exports/wristwatch_ar_wrap_animation_rigged.glb",
         mode: "wrist",
         sizeFactor: 1.55,
         orbit: "0deg 48deg 0.19m",
         orientation: [0, 0, 0],
       },
       classic: {
-        src: "exports/wristwatch_ar_classic_blue.glb",
+        src: "exports/wristwatch_ar_classic_blue_rigged.glb",
         mode: "wrist",
         sizeFactor: 1.55,
         orbit: "0deg 48deg 0.19m",
@@ -600,7 +600,7 @@
       const totalRotation = smoothed.rotation + dialRotate;
       watchLayer.classList.add("visible");
       watchLayer.style.transform = `translate(${smoothed.x - window.innerWidth / 2}px, ${smoothed.y - window.innerHeight / 2}px) translate(-50%, -50%) scale(${scale}) rotate(${totalRotation}deg)`;
-      watchViewer.orientation = `${modelX}deg ${modelY}deg ${modelZ}deg`;
+      watchViewer.setAttribute("orientation", `${modelX}deg ${modelY}deg ${modelZ}deg`);
 
     }
     function onHandsResults(results) {
@@ -777,6 +777,7 @@
   </script>
 </body>
 </html>
+
 
 
 
